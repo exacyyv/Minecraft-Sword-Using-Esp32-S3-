@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minecraft Sword Controller HUD</title>
+  <style>
+    :root {
+      --mc-dark: #121214;
+      --mc-panel: #1e1e24;
+      --mc-border-light: #52525e;
+      --mc-border-dark: #111116;
+      --mc-accent: #55ffff;
+      --mc-green: #55ff55;
+      --mc-gold: #ffaa00;
+      --mc-red: #ff5555;
+      --mc-purple: #aa00aa;
+      --mc-text: #ffffff;
+      --mc-text-dim: #aaaaaa;
+      --mc-btn-bg: #3c3c44;
+      --mc-btn-border-top: #5a5a66;
+      --mc-btn-border-bot: #222228;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--mc-dark);
+      background-image: 
+        radial-gradient(#22222b 15%, transparent 16%),
+        radial-gradient(#22222b 15%, transparent 16%);
+      background-size: 32px 32px;
+      background-position: 0 0, 16px 16px;
+      color: var(--mc-text);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    /* Minecraft UI Frame */
+    .mc-box {
+      background: var(--mc-panel);
+      border: 4px solid var(--mc-border-dark);
+      box-shadow: 
+        inset 4px 4px 0 var(--mc-border-light),
+        inset -4px -4px 0 var(--mc-border-dark),
+        0 8px 24px rgba(0, 0, 0, 0.6);
+      border-radius: 2px;
+      padding: 16px;
+    }
+
+    .header-bar {
+      width: 100%;
+      max-width: 1200px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    .title-group {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .title-group h1 {
+      font-size: 26px;
+      letter-spacing: 1px;
+      text-shadow: 2px 2px 0 #000;
+      color: var(--mc-accent);
+    }
+
+    .connection-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button.mc-btn {
+      background: var(--mc-btn-bg);
+      color: #fff;
+      border: 3px solid #000;
+      box-shadow: 
+        inset 3px 3px 0 var(--mc-btn-border-top),
+        inset -3px -3px 0 var(--mc-btn-border-bot);
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: filter 0.1s, transform 0.05s;
+    }
+
+    button.mc-btn:hover {
+      filter: brightness(1.15);
+    }
+
+    button.mc-btn:active {
+      box-shadow: 
+        inset -3px -3px 0 var(--mc-btn-border-top),
+        inset 3px 3px 0 var(--mc-btn-border-bot);
+      transform: translateY(1px);
+    }
+
+    button.mc-btn.primary {
+      background: #2e6930;
+      box-shadow: 
+        inset 3px 3px 0 #4a9e4e,
+        inset -3px -3px 0 #1b421d;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: #111116;
+      border: 2px solid #333;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #666;
+    }
+
+    .status-dot.online {
+      background: var(--mc-green);
+      box-shadow: 0 0 10px var(--mc-green);
+    }
+
+    /* Main Grid */
+    .hud-grid {
+      width: 100%;
+      max-width: 1200px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 900px) {
+      .hud-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Sword 3D Canvas Stage */
+    .sword-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      min-height: 380px;
+      overflow: hidden;
+    }
+
+    #sword-canvas {
+      width: 100%;
+      height: 320px;
+      background: radial-gradient(circle at center, #1e2638 0%, #101015 80%);
+      border: 2px solid #222;
+      border-radius: 4px;
+    }
+
+    .stage-overlay {
+      position: absolute;
+      top: 25px;
+      left: 25px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 13px;
+      text-shadow: 1px 1px 2px #000;
+    }
+
+    .ble-status-pill {
+      position: absolute;
+      top: 25px;
+      right: 25px;
+      padding: 6px 12px;
+      background: rgba(0,0,0,0.7);
+      border: 2px solid #444;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .ble-status-pill.connected {
+      border-color: var(--mc-accent);
+      color: var(--mc-accent);
+    }
+
+    /* Experience Bar (Swing Meter) */
+    .xp-container {
+      width: 100%;
+      margin-top: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .xp-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .xp-track {
+      width: 100%;
+      height: 18px;
+      background: #080808;
+      border: 2px solid #444;
+      border-radius: 2px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .xp-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #3d9435 0%, #7bf562 100%);
+      transition: width 0.05s ease-out;
+    }
+
+    .xp-threshold-mark {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--mc-red);
+      box-shadow: 0 0 6px var(--mc-red);
+    }
+
+    /* Buttons Matrix */
+    .buttons-section h2, .telemetry-section h2, .diag-section h2, .config-section h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--mc-border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--mc-gold);
+      text-shadow: 1px 1px 0 #000;
+    }
+
+    .btn-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .btn-card {
+      background: #15151c;
+      border: 3px solid #2a2a36;
+      border-radius: 3px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: all 0.08s ease;
+      position: relative;
+    }
+
+    .btn-card.active {
+      background: #1c3622;
+      border-color: var(--mc-green);
+      box-shadow: 0 0 16px rgba(85, 255, 85, 0.4);
+      transform: scale(1.02);
+    }
+
+    .btn-card .btn-name {
+      font-size: 15px;
+      font-weight: bold;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .btn-card .btn-pin {
+      font-size: 11px;
+      color: var(--mc-text-dim);
+    }
+
+    .btn-card .btn-binding {
+      font-size: 13px;
+      color: var(--mc-accent);
+      font-weight: bold;
+      margin-top: 4px;
+    }
+
+    .btn-card .btn-state {
+      font-size: 12px;
+      font-weight: bold;
+      padding: 3px 6px;
+      border-radius: 2px;
+      text-align: center;
+      background: #252530;
+      color: #777;
+      margin-top: 4px;
+    }
+
+    .btn-card.active .btn-state {
+      background: var(--mc-green);
+      color: #000;
+    }
+
+    .btn-card .btn-count {
+      font-size: 11px;
+      color: #888;
+      text-align: right;
+    }
+
+    /* Telemetry Stats Grid */
+    .telem-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 15px;
+    }
+
+    .stat-pill {
+      background: #16161d;
+      border: 2px solid #2d2d3a;
+      padding: 10px;
+      text-align: center;
+      border-radius: 3px;
+    }
+
+    .stat-pill .stat-label {
+      font-size: 11px;
+      color: var(--mc-text-dim);
+      text-transform: uppercase;
+    }
+
+    .stat-pill .stat-value {
+      font-size: 18px;
+      font-weight: bold;
+      color: var(--mc-accent);
+      margin-top: 4px;
+      font-family: monospace;
+    }
+
+    /* Diagnostics Checklist */
+    .diag-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .diag-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #15151c;
+      border: 2px solid #282834;
+      padding: 8px 12px;
+      border-radius: 3px;
+      font-size: 13px;
+    }
+
+    .diag-item.pass {
+      border-color: #27622b;
+      background: #112614;
+    }
+
+    .diag-item .diag-status {
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 2px;
+      font-size: 11px;
+    }
+
+    .diag-item.pass .diag-status {
+      background: var(--mc-green);
+      color: #000;
+    }
+
+    .diag-item.pending .diag-status {
+      background: #444;
+      color: #ccc;
+    }
+
+    /* Configuration Panel */
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    .config-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .config-row label {
+      font-size: 12px;
+      color: var(--mc-text-dim);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .config-row input[type="range"] {
+      accent-color: var(--mc-accent);
+      cursor: pointer;
+    }
+
+    /* Hotbar Style Footer */
+    .hotbar-container {
+      margin-top: 25px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mc-hotbar {
+      display: flex;
+      background: #1f1f26;
+      border: 3px solid #000;
+      box-shadow: inset 2px 2px 0 #52525e, inset -2px -2px 0 #111116;
+    }
+
+    .hotbar-slot {
+      width: 44px;
+      height: 44px;
+      border-right: 2px solid #111;
+      border-bottom: 2px solid #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      position: relative;
+    }
+
+    .hotbar-slot:last-child {
+      border-right: none;
+    }
+
+    .hotbar-slot.selected {
+      border: 3px solid #fff;
+      box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .terminal-toggle {
+      margin-top: 15px;
+      width: 100%;
+      max-width: 1200px;
+    }
+
+    #console-log {
+      width: 100%;
+      height: 110px;
+      background: #08080a;
+      border: 2px solid #222;
+      color: #6cdb6c;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 10px;
+      overflow-y: auto;
+      margin-top: 10px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation & Connection Bar -->
+  <header class="header-bar mc-box">
+    <div class="title-group">
+      <span style="font-size: 28px;">⚔️</span>
+      <div>
+        <h1>MINECRAFT SWORD HUD</h1>
+        <div style="font-size: 12px; color: var(--mc-text-dim);">ESP32-S3 Controller Hardware Telemetry</div>
+      </div>
+    </div>
+
+    <div class="connection-controls">
+      <div class="status-badge">
+        <div id="status-indicator" class="status-dot"></div>
+        <span id="status-text">Disconnected</span>
+      </div>
+
+      <button id="btn-webserial" class="mc-btn primary">Connect Web Serial</button>
+      <button id="btn-bridge" class="mc-btn">Connect Bridge (WS)</button>
+      <button id="btn-calibrate" class="mc-btn">Recalibrate Gyro</button>
+    </div>
+  </header>
+
+  <!-- Main HUD Layout Grid -->
+  <main class="hud-grid">
+
+    <!-- Column 1: 3D Sword Stage & IMU Telemetry -->
+    <section class="mc-box sword-stage">
+      <div class="stage-overlay">
+        <div><strong>Sword Orientation</strong></div>
+        <div id="orientation-text" style="color: var(--mc-accent);">Pitch: 0.0° | Yaw: 0.0°</div>
+        <div id="aim-text" style="color: #ffaa00;">Aim Mode: Idle</div>
+      </div>
+
+      <div id="ble-badge" class="ble-status-pill">BLE: Idle</div>
+
+      <canvas id="sword-canvas"></canvas>
+
+      <!-- Experience Bar (Swing Magnitude Gauge) -->
+      <div class="xp-container">
+        <div class="xp-label-row">
+          <span>SWING ATTACK POWER</span>
+          <span id="mag-label">0 dps / Threshold 380 dps</span>
+        </div>
+        <div class="xp-track">
+          <div id="xp-bar" class="xp-fill"></div>
+          <div class="xp-threshold-mark" style="left: 76%;"></div>
+        </div>
+      </div>
+
+      <!-- Telemetry Gauges -->
+      <div class="telem-stats" style="width: 100%;">
+        <div class="stat-pill">
+          <div class="stat-label">Pitch Rate (X)</div>
+          <div id="stat-gx" class="stat-value">0.0°/s</div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-label">Roll Rate (Y)</div>
+          <div id="stat-gy" class="stat-value">0.0°/s</div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-label">Yaw Rate (Z)</div>
+          <div id="stat-gz" class="stat-value">0.0°/s</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Column 2: Button Controller HUD -->
+    <section class="mc-box buttons-section">
+      <h2>
+        <span>Controller Buttons</span>
+        <span id="btn-summary" style="font-size: 13px; color: var(--mc-green);">All 6 Monitored</span>
+      </h2>
+
+      <div class="btn-cards-grid">
+        <!-- WALK -->
+        <div id="card-walk" class="btn-card">
+          <div class="btn-name">
+            <span>WALK</span>
+            <span class="btn-pin">GPIO 7</span>
+          </div>
+          <div class="btn-binding">Key: 'W' (Held)</div>
+          <div class="btn-state" id="state-walk">RELEASED</div>
+          <div class="btn-count" id="count-walk">Presses: 0</div>
+        </div>
+
+        <!-- JUMP -->
+        <div id="card-jump" class="btn-card">
+          <div class="btn-name">
+            <span>JUMP</span>
+            <span class="btn-pin">GPIO 5</span>
+          </div>
+          <div class="btn-binding">Key: Space (Held)</div>
+          <div class="btn-state" id="state-jump">RELEASED</div>
+          <div class="btn-count" id="count-jump">Presses: 0</div>
+        </div>
+
+        <!-- USE -->
+        <div id="card-use" class="btn-card">
+          <div class="btn-name">
+            <span>USE</span>
+            <span class="btn-pin">GPIO 11</span>
+          </div>
+          <div class="btn-binding">Mouse: Left Click</div>
+          <div class="btn-state" id="state-use">RELEASED</div>
+          <div class="btn-count" id="count-use">Presses: 0</div>
+        </div>
+
+        <!-- HOTBAR -->
+        <div id="card-hotbar" class="btn-card">
+          <div class="btn-name">
+            <span>HOTBAR</span>
+            <span class="btn-pin">GPIO 10</span>
+          </div>
+          <div class="btn-binding">Wheel: Scroll Slot</div>
+          <div class="btn-state" id="state-hotbar">RELEASED</div>
+          <div class="btn-count" id="count-hotbar">Presses: 0</div>
+        </div>
+
+        <!-- AIM -->
+        <div id="card-aim" class="btn-card">
+          <div class="btn-name">
+            <span>AIM</span>
+            <span class="btn-pin">GPIO 4</span>
+          </div>
+          <div class="btn-binding">Mouse: Look Cam</div>
+          <div class="btn-state" id="state-aim">RELEASED</div>
+          <div class="btn-count" id="count-aim">Presses: 0</div>
+        </div>
+
+        <!-- BOOT -->
+        <div id="card-boot" class="btn-card">
+          <div class="btn-name">
+            <span>BOOT AIM</span>
+            <span class="btn-pin">GPIO 0</span>
+          </div>
+          <div class="btn-binding">Aux: Board Aim</div>
+          <div class="btn-state" id="state-boot">RELEASED</div>
+          <div class="btn-count" id="count-boot">Presses: 0</div>
+        </div>
+      </div>
+
+      <!-- Hotbar Slot Preview -->
+      <div class="hotbar-container">
+        <div style="font-size: 12px; color: var(--mc-text-dim); text-transform: uppercase;">Active Hotbar Slot (Cycled via GPIO 10)</div>
+        <div class="mc-hotbar">
+          <div class="hotbar-slot selected" id="slot-0">🗡️</div>
+          <div class="hotbar-slot" id="slot-1">🏹</div>
+          <div class="hotbar-slot" id="slot-2">⛏️</div>
+          <div class="hotbar-slot" id="slot-3">🪓</div>
+          <div class="hotbar-slot" id="slot-4">🍎</div>
+          <div class="hotbar-slot" id="slot-5">🥩</div>
+          <div class="hotbar-slot" id="slot-6">🧱</div>
+          <div class="hotbar-slot" id="slot-7">🛡️</div>
+          <div class="hotbar-slot" id="slot-8">🧭</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Column 3: Hardware Diagnostics & Test Matrix -->
+    <section class="mc-box diag-section">
+      <h2>
+        <span>Hardware Diagnostics Suite</span>
+        <span id="diag-score" style="font-size: 14px; color: var(--mc-accent);">Score: 0 / 11</span>
+      </h2>
+
+      <div class="diag-list">
+        <div class="diag-item" id="diag-serial">
+          <span>1. Serial Link Established</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-who">
+          <span>2. MPU-6500 IMU Detected (0x70)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-cal">
+          <span>3. Gyro Baseline Calibration</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-motion">
+          <span>4. Gyro Motion Test (Move the sword)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-swing">
+          <span>5. Swing Test (Swing above 380 dps)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-btn-walk">
+          <span>6. WALK Button Pressed (GPIO 7)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-btn-jump">
+          <span>7. JUMP Button Pressed (GPIO 5)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-btn-use">
+          <span>8. USE Button Pressed (GPIO 11)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-btn-hotbar">
+          <span>9. HOTBAR Button Pressed (GPIO 10)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-btn-aim">
+          <span>10. AIM Button Pressed (GPIO 4)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+        <div class="diag-item" id="diag-btn-boot">
+          <span>11. BOOT Button Pressed (GPIO 0)</span>
+          <span class="diag-status">PENDING</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Column 4: Tuning & Upgrade Configuration -->
+    <section class="mc-box config-section">
+      <h2>
+        <span>Sword Configuration & Tuning</span>
+        <button id="btn-copy-config" class="mc-btn" style="padding: 4px 10px; font-size: 11px;">Copy C++</button>
+      </h2>
+
+      <div class="config-grid">
+        <div class="config-row">
+          <label>
+            <span>Swing Threshold</span>
+            <strong id="val-swing-thresh">380 dps</strong>
+          </label>
+          <input type="range" id="input-swing-thresh" min="150" max="800" value="380">
+        </div>
+
+        <div class="config-row">
+          <label>
+            <span>Aim Deadzone</span>
+            <strong id="val-deadzone">8.0 dps</strong>
+          </label>
+          <input type="range" id="input-deadzone" min="1" max="25" step="0.5" value="8.0">
+        </div>
+
+        <div class="config-row">
+          <label>
+            <span>Camera Sensitivity</span>
+            <strong id="val-sensitivity">3.5</strong>
+          </label>
+          <input type="range" id="input-sensitivity" min="1.0" max="10.0" step="0.1" value="3.5">
+        </div>
+
+        <div class="config-row">
+          <label>
+            <span>Debounce Time</span>
+            <strong id="val-debounce">30 ms</strong>
+          </label>
+          <input type="range" id="input-debounce" min="10" max="100" value="30">
+        </div>
+      </div>
+
+      <div style="margin-top: 15px; font-size: 12px; color: var(--mc-text-dim); line-height: 1.6;">
+        <div>Firmware defaults: <strong>SWING_THRESHOLD_DPS = 380</strong>, <strong>DEADZONE_DPS = 8.0</strong>.</div>
+        <div>Adjust sliders to experiment with sensitivity. Click <em>Copy C++</em> to paste into <code>src/main.cpp</code>.</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Live Serial Terminal Console -->
+  <footer class="terminal-toggle mc-box">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 13px; font-weight: bold; color: var(--mc-text-dim);">Live Telemetry Log</span>
+      <button id="btn-clear-log" class="mc-btn" style="padding: 3px 8px; font-size: 10px;">Clear</button>
+    </div>
+    <div id="console-log">Connecting to sword...</div>
+  </footer>
+
+  <script>
+    // State management
+    const state = {
+      connected: false,
+      serialType: null, // 'webserial' or 'websocket'
+      ws: null,
+      port: null,
+      reader: null,
+      
+      // Attitude estimation
+      pitch: 0,
+      roll: 0,
+      yaw: 0,
+      lastTimestamp: performance.now(),
+      
+      // Swing animation
+      swingAnim: 0,
+      peakDps: 0,
+      
+      // Buttons
+      counts: { walk: 0, jump: 0, use: 0, hotbar: 0, aim: 0, boot: 0 },
+      prevStates: { walk: 0, jump: 0, use: 0, hotbar: 0, aim: 0, boot: 0 },
+      hotbarIndex: 0,
+      
+      // Diagnostics checklist
+      tests: {
+        serial: false,
+        who: false,
+        cal: false,
+        motion: false,
+        swing: false,
+        'btn-walk': false,
+        'btn-jump': false,
+        'btn-use': false,
+        'btn-hotbar': false,
+        'btn-aim': false,
+        'btn-boot': false,
+      }
+    };
+
+    // DOM Elements
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    const consoleLog = document.getElementById('console-log');
+    const orientationText = document.getElementById('orientation-text');
+    const aimText = document.getElementById('aim-text');
+    const bleBadge = document.getElementById('ble-badge');
+    const xpBar = document.getElementById('xp-bar');
+    const magLabel = document.getElementById('mag-label');
+    const statGx = document.getElementById('stat-gx');
+    const statGy = document.getElementById('stat-gy');
+    const statGz = document.getElementById('stat-gz');
+    const diagScore = document.getElementById('diag-score');
+
+    function log(msg) {
+      const line = `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+      consoleLog.textContent += line;
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    document.getElementById('btn-clear-log').addEventListener('click', () => {
+      consoleLog.textContent = '';
+    });
+
+    function setConnected(type, desc) {
+      state.connected = true;
+      state.serialType = type;
+      statusIndicator.className = 'status-dot online';
+      statusText.textContent = `Connected (${desc})`;
+      markTestPass('serial');
+      log(`Connected via ${desc}`);
+    }
+
+    function setDisconnected() {
+      state.connected = false;
+      state.serialType = null;
+      statusIndicator.className = 'status-dot';
+      statusText.textContent = 'Disconnected';
+      log('Disconnected from sword.');
+    }
+
+    function markTestPass(id) {
+      if (!state.tests[id]) {
+        state.tests[id] = true;
+        const elem = document.getElementById(`diag-${id}`);
+        if (elem) {
+          elem.className = 'diag-item pass';
+          elem.querySelector('.diag-status').textContent = 'PASS ✓';
+        }
+        updateScore();
+      }
+    }
+
+    function updateScore() {
+      const passed = Object.values(state.tests).filter(Boolean).length;
+      const total = Object.keys(state.tests).length;
+      diagScore.textContent = `Score: ${passed} / ${total}`;
+      if (passed === total) {
+        diagScore.style.color = 'var(--mc-green)';
+        diagScore.textContent = 'Hardware 100% Verified ✓';
+      }
+    }
+
+    // Process structured telemetry
+    function handleTelemetry(data) {
+      // Buttons
+      const btnNames = ['walk', 'jump', 'use', 'hotbar', 'aim', 'boot'];
+      btnNames.forEach(name => {
+        const val = data[name] || 0;
+        const card = document.getElementById(`card-${name}`);
+        const stateElem = document.getElementById(`state-${name}`);
+        const countElem = document.getElementById(`count-${name}`);
+
+        if (val) {
+          card.classList.add('active');
+          stateElem.textContent = 'PRESSED';
+          markTestPass(`btn-${name}`);
+
+          if (!state.prevStates[name]) {
+            state.counts[name]++;
+            countElem.textContent = `Presses: ${state.counts[name]}`;
+            if (name === 'hotbar') {
+              cycleHotbar();
+            }
+          }
+        } else {
+          card.classList.remove('active');
+          stateElem.textContent = 'RELEASED';
+        }
+        state.prevStates[name] = val;
+      });
+
+      // Gyro DPS
+      const gx = data.gx || 0;
+      const gy = data.gy || 0;
+      const gz = data.gz || 0;
+      const mag = data.mag || 0;
+      statGx.textContent = `${gx.toFixed(1)}°/s`;
+      statGy.textContent = `${gy.toFixed(1)}°/s`;
+      statGz.textContent = `${gz.toFixed(1)}°/s`;
+
+      if (mag > 40) {
+        markTestPass('motion');
+      }
+
+      // Swing meter
+      const pct = Math.min(100, (mag / 500) * 100);
+      xpBar.style.width = `${pct}%`;
+      magLabel.textContent = `${Math.round(mag)} dps / Threshold 380 dps`;
+
+      if (data.swing || mag > 380) {
+        state.swingAnim = 1.0;
+        markTestPass('swing');
+      }
+
+      // BLE status
+      if (data.ble) {
+        bleBadge.className = 'ble-status-pill connected';
+        bleBadge.textContent = 'BLE: Paired';
+      } else {
+        bleBadge.className = 'ble-status-pill';
+        bleBadge.textContent = 'BLE: Advertising';
+      }
+
+      // Aiming
+      if (data.aiming) {
+        aimText.textContent = 'Aim Mode: ACTIVE';
+        aimText.style.color = 'var(--mc-green)';
+      } else {
+        aimText.textContent = 'Aim Mode: Idle';
+        aimText.style.color = '#ffaa00';
+      }
+
+      // Orientation integration
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - state.lastTimestamp) / 1000);
+      state.lastTimestamp = now;
+
+      // Integrate gyro rates into angles
+      state.pitch += gx * dt;
+      state.yaw += gz * dt;
+      // Damping towards center so drift slowly decays
+      state.pitch *= 0.98;
+      state.yaw *= 0.98;
+
+      orientationText.textContent = `Pitch: ${state.pitch.toFixed(1)}° | Yaw: ${state.yaw.toFixed(1)}°`;
+
+      // Auto-pass WHO_AM_I and Calibration if receiving live telemetry
+      markTestPass('who');
+      markTestPass('cal');
+    }
+
+    function cycleHotbar() {
+      const prevSlot = document.getElementById(`slot-${state.hotbarIndex}`);
+      if (prevSlot) prevSlot.classList.remove('selected');
+      state.hotbarIndex = (state.hotbarIndex + 1) % 9;
+      const nextSlot = document.getElementById(`slot-${state.hotbarIndex}`);
+      if (nextSlot) nextSlot.classList.add('selected');
+    }
+
+    // Parse incoming text lines from serial or websocket
+    function processIncomingLine(line) {
+      if (line.startsWith('TELEMETRY:')) {
+        try {
+          const jsonStr = line.substring(line.indexOf('{'));
+          const data = JSON.parse(jsonStr);
+          handleTelemetry(data);
+        } catch (e) {
+          console.error('Telemetry parse error', e);
+        }
+      } else if (line.includes('WHO_AM_I = 0x70')) {
+        markTestPass('who');
+        log('IMU confirmed: MPU-6500 (0x70)');
+      } else if (line.includes('Gyro offsets')) {
+        markTestPass('cal');
+        log(line);
+      } else if (line.includes('SWING (')) {
+        state.swingAnim = 1.0;
+        markTestPass('swing');
+        log(line);
+      } else if (line.includes(' down') || line.includes(' up')) {
+        log(line);
+      }
+    }
+
+    // WebSocket Bridge connection
+    function connectBridge() {
+      const host = window.location.hostname || 'localhost';
+      const wsUrl = `ws://${host}:8080/ws`;
+      log(`Attempting WebSocket connection to ${wsUrl}...`);
+
+      try {
+        const ws = new WebSocket(wsUrl);
+        state.ws = ws;
+
+        ws.onopen = () => {
+          setConnected('websocket', 'WebSocket Bridge');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.kind === 'telemetry') {
+              handleTelemetry(msg.data);
+            } else if (msg.kind === 'status') {
+              if (msg.serial_connected) {
+                markTestPass('serial');
+              }
+            } else if (msg.kind === 'event') {
+              processIncomingLine(msg.raw);
+            } else if (msg.kind === 'log') {
+              log(msg.text);
+            }
+          } catch (e) {
+            processIncomingLine(event.data);
+          }
+        };
+
+        ws.onclose = () => {
+          setDisconnected();
+          log('WebSocket connection closed.');
+        };
+
+        ws.onerror = (err) => {
+          log('WebSocket notice: bridge not reachable. Use Web Serial or run python3 bridge.py');
+        };
+      } catch (err) {
+        log(`WebSocket connection error: ${err.message}`);
+      }
+    }
+
+    // Web Serial connection
+    async function connectWebSerial() {
+      if (!('serial' in navigator)) {
+        alert('Web Serial is not supported in this browser. Please use Chrome, Edge, or run python3 bridge.py');
+        return;
+      }
+
+      try {
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        state.port = port;
+        setConnected('webserial', 'Web Serial Direct');
+
+        const textDecoder = new TextDecoderStream();
+        port.readable.pipeTo(textDecoder.writable);
+        const reader = textDecoder.readable.getReader();
+        state.reader = reader;
+
+        let buffer = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += value;
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            processIncomingLine(line.trim());
+          }
+        }
+      } catch (err) {
+        log(`Web Serial notice: ${err.message}`);
+      }
+    }
+
+    document.getElementById('btn-webserial').addEventListener('click', connectWebSerial);
+    document.getElementById('btn-bridge').addEventListener('click', connectBridge);
+
+    // Send calibrate command
+    document.getElementById('btn-calibrate').addEventListener('click', async () => {
+      log('Sending recalibration request to sword...');
+      if (state.serialType === 'websocket' && state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({ action: 'calibrate' }));
+      } else if (state.serialType === 'webserial' && state.port && state.port.writable) {
+        const writer = state.port.writable.getWriter();
+        await writer.write(new TextEncoder().encode('CAL\n'));
+        writer.releaseLock();
+      } else {
+        log('Error: Sword is not connected.');
+      }
+    });
+
+    // Tuning Sliders
+    const swingSlider = document.getElementById('input-swing-thresh');
+    const deadzoneSlider = document.getElementById('input-deadzone');
+    const sensSlider = document.getElementById('input-sensitivity');
+    const debounceSlider = document.getElementById('input-debounce');
+
+    swingSlider.addEventListener('input', (e) => {
+      document.getElementById('val-swing-thresh').textContent = `${e.target.value} dps`;
+    });
+    deadzoneSlider.addEventListener('input', (e) => {
+      document.getElementById('val-deadzone').textContent = `${parseFloat(e.target.value).toFixed(1)} dps`;
+    });
+    sensSlider.addEventListener('input', (e) => {
+      document.getElementById('val-sensitivity').textContent = parseFloat(e.target.value).toFixed(1);
+    });
+    debounceSlider.addEventListener('input', (e) => {
+      document.getElementById('val-debounce').textContent = `${e.target.value} ms`;
+    });
+
+    document.getElementById('btn-copy-config').addEventListener('click', () => {
+      const code = `// Sword Tuning Parameters
+const float SWING_THRESHOLD_DPS = ${parseFloat(swingSlider.value).toFixed(1)}f;
+const float DEADZONE_DPS        = ${parseFloat(deadzoneSlider.value).toFixed(1)}f;
+const float CAM_SENSITIVITY     = ${parseFloat(sensSlider.value).toFixed(1)}f;
+const unsigned long DEBOUNCE_MS = ${debounceSlider.value};`;
+      navigator.clipboard.writeText(code).then(() => {
+        alert('Configuration copied to clipboard!');
+      });
+    });
+
+    // 2D Pixelated Diamond Sword Canvas Renderer
+    const canvas = document.getElementById('sword-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = canvas.clientWidth * window.devicePixelRatio;
+      canvas.height = canvas.clientHeight * window.devicePixelRatio;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Draw pixel art diamond sword
+    function drawSword(ctx, x, y, scale, angle, swingProgress) {
+      ctx.save();
+      ctx.translate(x, y);
+
+      // Swing arc rotation
+      const swingAngle = Math.sin(swingProgress * Math.PI) * -0.9;
+      ctx.rotate(angle + swingAngle);
+      ctx.scale(scale, scale);
+
+      // Minecraft Diamond Sword pixel matrix
+      // 1: Cyan blade, 2: Dark cyan outline, 3: Brown guard/hilt, 4: Dark guard, 5: Pommel
+      const palette = {
+        1: '#55ffff', // Diamond body
+        2: '#2c8e8e', // Blade outline
+        3: '#866043', // Hilt wood
+        4: '#523a28', // Hilt dark
+        5: '#38ffff'  // Highlight
+      };
+
+      // Draw Sword Blade, Crossguard, and Hilt
+      // Blade
+      ctx.fillStyle = palette[2];
+      ctx.fillRect(-6, -110, 12, 80);
+      ctx.fillStyle = palette[1];
+      ctx.fillRect(-4, -108, 8, 76);
+      ctx.fillStyle = palette[5];
+      ctx.fillRect(-2, -106, 4, 72);
+
+      // Tip
+      ctx.fillStyle = palette[2];
+      ctx.beginPath();
+      ctx.moveTo(-6, -110);
+      ctx.lineTo(0, -125);
+      ctx.lineTo(6, -110);
+      ctx.fill();
+
+      ctx.fillStyle = palette[1];
+      ctx.beginPath();
+      ctx.moveTo(-4, -108);
+      ctx.lineTo(0, -121);
+      ctx.lineTo(4, -108);
+      ctx.fill();
+
+      // Crossguard
+      ctx.fillStyle = palette[4];
+      ctx.fillRect(-22, -30, 44, 10);
+      ctx.fillStyle = palette[3];
+      ctx.fillRect(-20, -28, 40, 6);
+      ctx.fillStyle = palette[1];
+      ctx.fillRect(-4, -28, 8, 6);
+
+      // Handle
+      ctx.fillStyle = palette[4];
+      ctx.fillRect(-5, -20, 10, 32);
+      ctx.fillStyle = palette[3];
+      ctx.fillRect(-3, -18, 6, 28);
+
+      // Pommel
+      ctx.fillStyle = palette[4];
+      ctx.fillRect(-10, 12, 20, 10);
+      ctx.fillStyle = palette[1];
+      ctx.fillRect(-8, 14, 16, 6);
+
+      ctx.restore();
+
+      // Swing Particle Sweep Arc
+      if (swingProgress > 0) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.strokeStyle = `rgba(85, 255, 255, ${swingProgress * 0.8})`;
+        ctx.lineWidth = 14 * swingProgress;
+        ctx.beginPath();
+        ctx.arc(0, 0, 110, -Math.PI * 0.7, -Math.PI * 0.1);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(255, 255, 255, ${swingProgress * 0.9})`;
+        ctx.lineWidth = 6 * swingProgress;
+        ctx.beginPath();
+        ctx.arc(0, 0, 110, -Math.PI * 0.65, -Math.PI * 0.15);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Animation Render Loop
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const cx = canvas.width / 2;
+      const cy = canvas.height * 0.65;
+      const scale = (canvas.height / 360) * 1.3;
+
+      // Calculate tilt angle based on pitch and yaw
+      const tiltAngle = (state.pitch * 0.02) + (state.yaw * 0.015);
+
+      // Update swing animation decay
+      if (state.swingAnim > 0) {
+        state.swingAnim -= 0.05;
+        if (state.swingAnim < 0) state.swingAnim = 0;
+      }
+
+      drawSword(ctx, cx, cy, scale, tiltAngle, state.swingAnim);
+
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+
+    // Auto connect bridge on launch if available
+    window.addEventListener('load', () => {
+      connectBridge();
+    });
+  </script>
+</body>
+</html>

@@ -87,6 +87,23 @@ void updateButtons(unsigned long now) {
   }
 }
 
+void calibrateGyro() {
+  Serial.println("Calibrating gyro: keep the sword still...");
+  long sx = 0, sy = 0, sz = 0;
+  int n = 0;
+  for (int i = 0; i < 200; i++) {
+    int16_t x, y, z;
+    if (imuOk && mpuReadGyroRaw(x, y, z)) { sx += x; sy += y; sz += z; n++; }
+    delay(10);
+  }
+  if (n > 0) {
+    gx_off = sx / (float)n / GYRO_LSB_PER_DPS;
+    gy_off = sy / (float)n / GYRO_LSB_PER_DPS;
+    gz_off = sz / (float)n / GYRO_LSB_PER_DPS;
+  }
+  Serial.printf("Gyro offsets %.2f %.2f %.2f (IMU %s)\n", gx_off, gy_off, gz_off, imuOk ? "OK" : "MISSING");
+}
+
 void setup() {
   Serial.begin(115200);
   pinMode(PIN_BOOT, INPUT_PULLUP);
@@ -108,20 +125,7 @@ void setup() {
   mpuWrite(0x1A, 0x03);  // gyro DLPF ~41 Hz
   mpuWrite(0x1B, 0x08);  // +-500 dps
 
-  Serial.println("Calibrating gyro - keep the sword still...");
-  long sx = 0, sy = 0, sz = 0;
-  int n = 0;
-  for (int i = 0; i < 200; i++) {
-    int16_t x, y, z;
-    if (imuOk && mpuReadGyroRaw(x, y, z)) { sx += x; sy += y; sz += z; n++; }
-    delay(10);
-  }
-  if (n > 0) {
-    gx_off = sx / (float)n / GYRO_LSB_PER_DPS;
-    gy_off = sy / (float)n / GYRO_LSB_PER_DPS;
-    gz_off = sz / (float)n / GYRO_LSB_PER_DPS;
-  }
-  Serial.printf("Gyro offsets %.2f %.2f %.2f (IMU %s)\n", gx_off, gy_off, gz_off, imuOk ? "OK" : "MISSING");
+  calibrateGyro();
 
   keyboard.begin();
   mouse.begin();
@@ -135,7 +139,42 @@ void loop() {
   float dt = (now - lastLoop) / 1000.0f;
   lastLoop = now;
 
+  // Handle incoming serial commands (e.g. CAL, PING)
+  while (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd == "CAL" || cmd == "CALIBRATE") {
+      calibrateGyro();
+    } else if (cmd == "PING") {
+      Serial.println("{\"type\":\"pong\"}");
+    }
+  }
+
   updateButtons(now);
+
+  bool connected = keyboard.isConnected();
+  if (connected != wasConnected) {
+    Serial.println(connected ? "BLE connected" : "BLE disconnected");
+    if (connected) {
+      keyboard.releaseAll();
+      mouse.release(MOUSE_LEFT | MOUSE_RIGHT | MOUSE_MIDDLE);
+    }
+    wasConnected = connected;
+  }
+
+  // Handle button events (both serial log and BLE action)
+  for (Button &b : buttons) {
+    if (b.held == b.down) continue;
+    b.down = b.held;
+    Serial.printf("%s %s\n", b.name, b.held ? "down" : "up");
+    if (connected) {
+      if (b.mouseBtn == SCROLL_STEP_BTN) { if (b.held) mouse.move(0, 0, -1); }
+      else if (b.key) { if (b.held) keyboard.press(b.key); else keyboard.release(b.key); }
+      else if (b.mouseBtn) { if (b.held) mouse.press(b.mouseBtn); else mouse.release(b.mouseBtn); }
+    }
+  }
+
+  // Periodic human-readable button debug line
   static unsigned long lastBtnDbg = 0;
   static uint8_t lastMask = 0;
   uint8_t mask = 0;
@@ -148,32 +187,9 @@ void loop() {
     Serial.printf(" BOOT=%d\n", digitalRead(PIN_BOOT));
   }
 
-  bool connected = keyboard.isConnected();
-  if (connected != wasConnected) {
-    Serial.println(connected ? "BLE connected" : "BLE disconnected");
-    if (connected) {
-      keyboard.releaseAll();
-      mouse.release(MOUSE_LEFT | MOUSE_RIGHT | MOUSE_MIDDLE);
-    }
-    wasConnected = connected;
-  }
-  if (!connected) {
-    for (Button &b : buttons) b.down = false;
-    accX = accY = 0;
-    return;
-  }
-
-  for (Button &b : buttons) {
-    if (b.held == b.down || (!b.key && !b.mouseBtn)) continue;
-    if (b.mouseBtn == SCROLL_STEP_BTN) { if (b.held) mouse.move(0, 0, -1); }
-    else if (b.key) { if (b.held) keyboard.press(b.key); else keyboard.release(b.key); }
-    else { if (b.held) mouse.press(b.mouseBtn); else mouse.release(b.mouseBtn); }
-    Serial.printf("%s %s\n", b.name, b.held ? "down" : "up");
-    b.down = b.held;
-  }
-
-  float gx, gy, gz;
-  if (!imuOk || !readGyro(gx, gy, gz)) return;
+  // Always read gyro even if BLE is disconnected, so the HUD and diagnostic suite work
+  float gx = 0, gy = 0, gz = 0;
+  bool gyroValid = imuOk && readGyro(gx, gy, gz);
 
   bool aiming = TEST_ALWAYS_AIM || aimButton.held || digitalRead(PIN_BOOT) == LOW;
   static bool wasAiming = false;
@@ -181,15 +197,31 @@ void loop() {
     Serial.printf("AIM %s (GPIO%d=%d BOOT=%d)\n", aiming ? "down" : "up", PIN_AIM, digitalRead(PIN_AIM), digitalRead(PIN_BOOT));
     wasAiming = aiming;
   }
-  static unsigned long lastDbg = 0;
+
+  float mag = gyroValid ? sqrtf(gx * gx + gy * gy + gz * gz) : 0;
   static float peak = 0;
-  peak = fmaxf(peak, sqrtf(gx * gx + gy * gy + gz * gz));
+  peak = fmaxf(peak, mag);
+
+  static unsigned long lastDbg = 0;
   if (now - lastDbg > 500) {
     lastDbg = now;
     Serial.printf("peak %.0f dps, aiming=%d\n", peak, aiming);
     peak = 0;
   }
-  if (aiming) {
+
+  bool swingThisTick = false;
+  if (mag > SWING_THRESHOLD_DPS && now - lastSwing > SWING_COOLDOWN_MS) {
+    lastSwing = now;
+    swingThisTick = true;
+    Serial.printf("SWING (%.0f dps)\n", mag);
+    if (connected) {
+      mouse.press(MOUSE_RIGHT);
+      delay(150);  // Minecraft polls input per tick, so brief click may be missed
+      mouse.release(MOUSE_RIGHT);
+    }
+  }
+
+  if (connected && aiming) {
     float yaw = fabsf(gz) > DEADZONE_DPS ? gz : 0;
     float pitch = fabsf(gx) > DEADZONE_DPS ? gx : 0;
     accX += yaw * dt * CAM_SENSITIVITY * YAW_SIGN;
@@ -202,14 +234,20 @@ void loop() {
     }
   } else {
     accX = accY = 0;
-    float mag = sqrtf(gx * gx + gy * gy + gz * gz);
-    if (mag > SWING_THRESHOLD_DPS && now - lastSwing > SWING_COOLDOWN_MS) {
-      lastSwing = now;
-      mouse.press(MOUSE_RIGHT);
-      delay(150);  // Minecraft polls input per frame/tick, so a short click can be missed
-      mouse.release(MOUSE_RIGHT);
-      Serial.printf("SWING (%.0f dps)\n", mag);
-    }
+  }
+
+  // Periodic structured telemetry for HUD (every 50 ms = 20 Hz)
+  static unsigned long lastTelem = 0;
+  if (now - lastTelem >= 50) {
+    lastTelem = now;
+    int walkVal = buttons[0].held ? 1 : 0;
+    int jumpVal = buttons[1].held ? 1 : 0;
+    int useVal = buttons[2].held ? 1 : 0;
+    int hotbarVal = buttons[3].held ? 1 : 0;
+    int aimVal = buttons[4].held ? 1 : 0;
+    int bootVal = (digitalRead(PIN_BOOT) == LOW) ? 1 : 0;
+    Serial.printf("TELEMETRY:{\"walk\":%d,\"jump\":%d,\"use\":%d,\"hotbar\":%d,\"aim\":%d,\"boot\":%d,\"gx\":%.1f,\"gy\":%.1f,\"gz\":%.1f,\"mag\":%.1f,\"ble\":%d,\"aiming\":%d,\"swing\":%d}\n",
+      walkVal, jumpVal, useVal, hotbarVal, aimVal, bootVal, gx, gy, gz, mag, connected ? 1 : 0, aiming ? 1 : 0, swingThisTick ? 1 : 0);
   }
 }
          
