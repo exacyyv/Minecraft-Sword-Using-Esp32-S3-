@@ -16,7 +16,7 @@ const bool TEST_ALWAYS_AIM = false;  // true: gyro always moves the cursor (swin
 
 // ---- Pins ----
 const int PIN_SDA = 8, PIN_SCL = 9;
-const int PIN_AIM = 4, PIN_JUMP = 5, PIN_W = 7, PIN_USE = 11, PIN_HOTBAR = 10, PIN_BOOT = 0;  // BOOT button on the board also works as aim
+const int PIN_AIM = 4, PIN_JUMP = 7, PIN_W = 5, PIN_USE = 11, PIN_HOTBAR = 10, PIN_BOOT = 0;  // BOOT button on the board also works as aim
 
 const uint8_t MPU_ADDR = 0x68;
 const float GYRO_LSB_PER_DPS = 65.5f;  // +-500 dps
