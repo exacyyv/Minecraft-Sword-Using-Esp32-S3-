@@ -27,9 +27,9 @@ BleComboMouse mouse(&keyboard);
 // Active-LOW button with debounce. A button that already reads pressed at boot (legs shorted,
 // bad wiring) stays ignored until it has been seen released once, so it can't spam keys.
 struct Button { const char *name; int pin; char key; uint8_t mouseBtn; bool raw, stable, armed, held, down; unsigned long changedAt; };
-// Mouse buttons follow the user's game: right = attack/mine, left = use/place.
+// Mouse buttons follow standard Minecraft: left = attack/mine, right = use/place.
 const uint8_t SCROLL_STEP_BTN = 0xFF;  // pseudo mouse button: one scroll step on press (next hotbar slot)
-Button buttons[] = {{"WALK", PIN_W, 'w', 0}, {"JUMP", PIN_JUMP, ' ', 0}, {"USE", PIN_USE, 0, MOUSE_LEFT},
+Button buttons[] = {{"WALK", PIN_W, 'w', 0}, {"JUMP", PIN_JUMP, ' ', 0}, {"USE", PIN_USE, 0, MOUSE_RIGHT},
                     {"HOTBAR", PIN_HOTBAR, 0, SCROLL_STEP_BTN}, {"AIM", PIN_AIM, 0, 0}};
 Button &aimButton = buttons[4];
 
@@ -215,9 +215,9 @@ void loop() {
     swingThisTick = true;
     Serial.printf("SWING (%.0f dps)\n", mag);
     if (connected) {
-      mouse.press(MOUSE_RIGHT);
+      mouse.press(MOUSE_LEFT);
       delay(150);  // Minecraft polls input per tick, so brief click may be missed
-      mouse.release(MOUSE_RIGHT);
+      mouse.release(MOUSE_LEFT);
     }
   }
 
